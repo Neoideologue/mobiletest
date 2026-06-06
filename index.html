@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>边境余火 Mobile SLG/RPG</title>
+<style>
+:root{color-scheme:dark;--bg:#0f172a;--panel:#182235;--panel2:#223047;--line:#3a4a64;--text:#eef4ff;--muted:#aebbd0;--gold:#f1c76b;--green:#73d49a;--red:#ff7c7c;--shadow:rgba(0,0,0,.35)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}body{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}.app{width:min(720px,100%);min-height:calc(100dvh - 28px);margin:0 auto;display:grid;grid-template-rows:auto auto 1fr auto;gap:10px}header{display:flex;align-items:center;justify-content:space-between;gap:10px}h1{margin:0;font-size:22px;line-height:1.15}.day{flex:0 0 auto;min-width:74px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--gold);text-align:center;font-weight:900}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.stat{min-width:0;padding:9px 7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 10px 20px var(--shadow)}.stat span{display:block;color:var(--muted);font-size:12px;white-space:nowrap}.stat strong{display:block;margin-top:2px;font-size:17px;line-height:1.1;overflow-wrap:anywhere}main{display:grid;grid-template-rows:auto 1fr;gap:10px;min-height:0}.scene{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#121a2a}canvas{display:block;width:100%;aspect-ratio:16/9;background:#151f31}.log{min-height:190px;max-height:38dvh;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 10px 20px var(--shadow)}.entry{margin:0 0 9px;color:var(--muted);font-size:15px;line-height:1.45}.entry:first-child{color:var(--text)}.entry b{color:var(--gold)}.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}button{min-height:54px;padding:10px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--text);font:inherit;font-size:15px;font-weight:900;box-shadow:0 8px 15px var(--shadow);touch-action:manipulation}button:active{transform:translateY(1px);background:#2b3c58}button small{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:700;line-height:1.15}.danger{border-color:#7b4146;color:#ffd3d3}.good{border-color:#397052;color:#d4ffe3}.wide{grid-column:1/-1}@media(max-width:390px){body{padding-left:9px;padding-right:9px}h1{font-size:19px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}button{font-size:14px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><h1>边境余火</h1><div class="day" id="day">第 1 天</div></header>
+<section class="stats" aria-label="据点状态">
+<div class="stat"><span>粮食</span><strong id="food">18</strong></div>
+<div class="stat"><span>钢材</span><strong id="steel">6</strong></div>
+<div class="stat"><span>士气</span><strong id="morale">55</strong></div>
+<div class="stat"><span>小队</span><strong id="squad">3</strong></div>
+</section>
+<main><section class="scene"><canvas id="map" width="960" height="540"></canvas></section><section class="log" id="log" aria-live="polite"></section></main>
+<section class="actions" aria-label="行动">
+<button id="scout">侦察废墟<small>找资源，也可能撞敌人</small></button>
+<button id="raid" class="danger">突袭匪帮<small>高风险，高收益</small></button>
+<button id="build">加固据点<small>消耗钢材，提高防御</small></button>
+<button id="rest">休整训练<small>恢复士气和伤员</small></button>
+<button id="end" class="wide good">结束当天<small>消耗粮食，推进局势</small></button>
+<button id="restart" class="wide">重新开局<small>保留在这个页面即可重玩</small></button>
+</section>
+</div>
+<script>
+const canvas=document.getElementById('map'),ctx=canvas.getContext('2d');
+const els={day:day,food:food,steel:steel,morale:morale,squad:squad,log:log};
+const fresh=()=>({day:1,food:18,steel:6,morale:55,squad:3,defense:1,intel:0,threat:36,relic:0,mode:'playing',lastAction:'你接管一座边境小据点。目标：撑过 10 天，或找齐 3 个旧城信标。',log:['你接管一座边境小据点。目标：撑过 <b>10 天</b>，或找齐 <b>3 个旧城信标</b>。','每次行动会改变资源、士气、敌情。粮食归零、小队全灭或士气崩溃都会失败。']});
+let state=fresh(),anim=0;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const roll=n=>Math.floor(Math.random()*n);
+function push(msg){state.lastAction=msg.replace(/<[^>]+>/g,'');state.log.unshift(msg);state.log=state.log.slice(0,18);checkEnd();render()}
+function canAct(){if(state.mode==='playing')return true;push('这一局已经结束，点重新开局。');return false}
+function scout(){if(!canAct())return;const find=roll(100);state.intel++;state.morale=clamp(state.morale+2,0,100);if(find<45){const f=3+roll(5);state.food+=f;state.threat=clamp(state.threat+2,0,100);push(`侦察队找到 <b>${f}</b> 份粮食，但远处烟尘说明敌人也注意到了你。`)}else if(find<78){const s=2+roll(4);state.steel+=s;push(`你们拆回 <b>${s}</b> 单位钢材，还标出一条隐蔽小路。`)}else{state.relic++;state.threat=clamp(state.threat+8,0,100);push(`废墟地下室亮起旧城信标。信标 ${state.relic}/3，敌情同步升温。`)}}
+function raid(){if(!canAct())return;const power=state.squad*18+state.morale+state.intel*5+roll(45),enemy=state.threat+55+roll(35);state.intel=Math.max(0,state.intel-1);if(power>=enemy){const f=5+roll(7),s=3+roll(5);state.food+=f;state.steel+=s;state.threat=clamp(state.threat-13,0,100);state.morale=clamp(state.morale+7,0,100);push(`突袭成功。缴获粮食 <b>${f}</b>、钢材 <b>${s}</b>，匪帮威胁下降。`)}else{const loss=Math.random()<.48?1:0;state.squad-=loss;state.morale=clamp(state.morale-13,0,100);state.threat=clamp(state.threat+9,0,100);push(loss?'突袭失败，一支小队没能回来。士气明显动摇。':'突袭受挫，虽然没人阵亡，但士气和时间都被消耗。')}}
+function build(){if(!canAct())return;if(state.steel<4){push('钢材不足，至少需要 4 单位才能加固据点。');return}state.steel-=4;state.defense++;state.morale=clamp(state.morale+3,0,100);state.threat=clamp(state.threat-4,0,100);push(`据点防御提升到 <b>${state.defense}</b> 级。巡逻队终于敢把灯点亮一点。`)}
+function rest(){if(!canAct())return;state.food=Math.max(0,state.food-2);state.morale=clamp(state.morale+12,0,100);if(state.squad<5&&Math.random()<.35){state.squad++;push('休整时收编了两名流民，补成一支新小队。')}else push('你让大家睡了一整夜，换来更稳的手和更清醒的判断。')}
+function endDay(){if(!canAct())return;state.day++;state.food-=Math.max(1,state.squad);state.threat=clamp(state.threat+6-state.defense*2,0,100);if(state.threat>62&&Math.random()<(state.threat-45)/90){const block=state.defense*17+state.squad*11+roll(45);if(block<state.threat){state.squad--;state.morale=clamp(state.morale-10,0,100);push('夜袭突破外墙，一支小队被打散。明天必须处理威胁。');return}state.morale=clamp(state.morale+4,0,100);state.threat=clamp(state.threat-8,0,100);push('夜里有敌人试探，被新修的火力点压了回去。');return}const w=['沙尘很大，脚印很快消失。','无线电里只有静电声。','北边亮起几秒旧时代的城市灯。','巡逻队说，今晚没人做噩梦。'];push(`第 ${state.day-1} 天结束。${w[roll(w.length)]}`)}
+function restart(){state=fresh();render()}
+function checkEnd(){if(state.relic>=3){state.mode='win';state.log.unshift('三座旧城信标连成坐标。救援飞艇在黎明抵达，你保住了边境据点。')}else if(state.day>10){state.mode='win';state.log.unshift('你撑过了最危险的十天。商队重新开路，据点活了下来。')}else if(state.food<=0){state.mode='lose';state.log.unshift('粮仓见底，人群在清晨散去。据点失败。')}else if(state.squad<=0){state.mode='lose';state.log.unshift('最后一支小队消失在荒原。据点无人可守。')}else if(state.morale<=0){state.mode='lose';state.log.unshift('士气崩溃，命令再也传不下去。据点失败。')}}
+function renderStats(){els.day.textContent=state.mode==='playing'?`第 ${state.day} 天`:state.mode==='win'?'胜利':'失败';els.food.textContent=state.food;els.steel.textContent=state.steel;els.morale.textContent=state.morale;els.squad.textContent=state.squad;els.log.innerHTML=state.log.map(x=>`<p class="entry">${x}</p>`).join('')}
+function draw(){const w=canvas.width,h=canvas.height;anim+=.01;ctx.clearRect(0,0,w,h);const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#132034');g.addColorStop(.62,'#263347');g.addColorStop(1,'#171c25');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);ctx.fillStyle='#334156';for(let i=0;i<9;i++){const x=i*125-50,top=190+Math.sin(i*1.7)*35;ctx.beginPath();ctx.moveTo(x,h);ctx.lineTo(x+95,top);ctx.lineTo(x+210,h);ctx.closePath();ctx.fill()}ctx.fillStyle='#1f2938';ctx.fillRect(0,365,w,175);const bx=120,by=328;ctx.fillStyle='#8b6f48';ctx.fillRect(bx,by-72,210,88);ctx.fillStyle='#d7ad64';ctx.fillRect(bx+20,by-98,170,34);ctx.fillStyle='#2b374a';for(let i=0;i<state.defense;i++)ctx.fillRect(bx-20+i*42,by-18,34,64);for(let i=0;i<state.squad;i++){ctx.fillStyle=i%2?'#82b7ff':'#73d49a';ctx.beginPath();ctx.arc(410+i*38,342+Math.sin(anim*5+i)*4,11,0,Math.PI*2);ctx.fill();ctx.fillRect(405+i*38,353,10,26)}ctx.fillStyle='#ff7c7c';for(let i=0;i<Math.ceil(state.threat/20);i++){ctx.beginPath();ctx.arc(740+i*26,300+Math.sin(anim*6+i)*6,13,0,Math.PI*2);ctx.fill()}ctx.fillStyle='#f1c76b';for(let i=0;i<state.relic;i++){ctx.fillRect(560+i*34,230,18,70);ctx.beginPath();ctx.arc(569+i*34,218,16+Math.sin(anim*10)*2,0,Math.PI*2);ctx.fill()}ctx.fillStyle='#eef4ff';ctx.font='700 24px system-ui,sans-serif';ctx.fillText(`防御 ${state.defense}  敌情 ${state.threat}  信标 ${state.relic}/3`,32,46);if(state.mode!=='playing'){ctx.fillStyle=state.mode==='win'?'rgba(25,80,52,.82)':'rgba(92,32,40,.82)';ctx.fillRect(0,0,w,h);ctx.fillStyle='#fff';ctx.font='900 58px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(state.mode==='win'?'据点存活':'据点失守',w/2,h/2);ctx.textAlign='left'}}
+function render(){renderStats();draw()}
+window.advanceTime=ms=>{for(let i=0;i<Math.max(1,Math.round(ms/(1000/60)));i++)anim+=.006;draw()};
+window.render_game_to_text=()=>JSON.stringify({note:'Text SLG/RPG. Canvas origin top-left, x right, y down.',mode:state.mode,day:state.day,resources:{food:state.food,steel:state.steel,morale:state.morale,squad:state.squad,defense:state.defense,intel:state.intel,threat:state.threat,relic:state.relic},lastAction:state.lastAction,availableActions:['scout','raid','build','rest','endDay','restart']});
+scout.onclick=scout;raid.onclick=raid;build.onclick=build;rest.onclick=rest;end.onclick=endDay;restart.onclick=restart;render();
+</script>
+</body>
+</html>
